@@ -1,0 +1,179 @@
+---
+title: "Timing EXTRA LOH - alpha_beta"
+author: "University of trieste Sara Cocomello"
+date: "2024-06-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r packages_data, results='hide', echo = FALSE }
+library(ggplot2)
+library(tidyverse)
+#library(rstan)
+library(cmdstanr)
+source("scripts/fit_no_filtering.R")
+source("scripts/utils.R")
+source("scripts/simulate_mutations.R")
+source("scripts/plot.R")
+
+
+UPN01_ab <- readRDS("Data/alpha_beta/UPN01/mutations.rds")
+UPN02 <- readRDS("Data/alpha_beta/UPN02/mutations.rds")
+
+UPN04_ab <- readRDS("Data/alpha_beta/UPN04/mutations.rds")
+UPN05 <- readRDS("Data/alpha_beta/UPN05/mutations.rds")
+
+
+UPN10 <- readRDS("Data/alpha_beta/UPN10/mutations.rds")
+UPN11 <- readRDS("Data/alpha_beta/UPN11/mutations.rds")
+```
+
+
+
+```{r data}
+
+# ALTERNATIVE FILTERING timing_classification 
+
+UPN01_NV = UPN01 %>%  ungroup %>% filter(timing_classification %in% c("alpha_0", "alpha_1"), 
+                                         PASS == TRUE)
+
+UPN02_NV = UPN02 %>% filter(timing_classification == "alpha_shared",
+                            VAF.PRE<0.35, 
+                            PASS == TRUE)
+
+
+UPN04_NV = UPN04 %>% ungroup %>% filter(timing_classification %in% c("alpha"), 
+                                        PASS == TRUE)
+
+UPN05_NV = UPN05 %>% filter(timing_classification %in% c("alpha", "beta"), 
+                            PASS == TRUE)
+
+
+UPN10_NV = UPN10 %>% filter(timing_classification %in% c("alpha_0", "alpha", "beta_subclonal"), 
+                            PASS == TRUE)
+
+UPN11_NV = UPN11 %>% filter(timing_classification %in% c("alpha_0", "alpha", "beta"), 
+                            PASS == TRUE)
+
+
+data <- list(UPN01_NV=UPN01_NV, UPN02_NV = UPN02_NV, UPN04_NV = UPN04_NV,  UPN05_NV = UPN05_NV, UPN10_NV = UPN10_NV, UPN11_NV = UPN11_NV)
+
+
+
+names <- c("UPN01_NV", "UPN02_NV","UPN04_NV", "UPN05_NV", "UPN10_NV", "UPN11_NV")
+
+
+```
+
+
+```{r plot data NV.REL/DP.REL mutations alpha - beta per segment}
+for (i in 1:length(names)){
+  assign("x", data[[names[i]]])
+  hist_data <- x %>% 
+  ggplot(mapping = aes(x=(NV.REL/DP.REL), fill=timing_classification, col = timing_classification)) + #
+  geom_histogram(binwidth=0.01, alpha = 0.5, position = "identity") +
+  theme(legend.position = 'top') +
+  ggtitle( names[i], data[[names[i]]]$segment.REL)
+
+  print(hist_data)
+  ggsave(paste0("plots/data",names[i],"_ab.png"))
+
+}
+
+```
+
+
+
+```{r inference, results='hide'}
+
+data_cna <- dplyr::tibble()
+inference_results <- dplyr::tibble()
+summarized_results <- dplyr::tibble()
+accepted_mutations <- dplyr::tibble()
+
+purity = 1
+for(i in 1:length(names)){
+  
+  Input_data <- data[[names[i]]]
+  
+  #Input_data = UPN05_NV
+  data_cna_single <- Input_data %>% mutate (Major = unlist(strsplit(Input_data$segment.REL[1], ":"))[1],
+                                            minor = unlist(strsplit(Input_data$segment.REL[1], ":"))[2],
+                                            purity = purity,
+                                            from = min(Input_data$from), ### GIUSTO?
+                                            to = max(Input_data$to),
+                                            segment_name = names[i])
+  
+  #data_cna <- (seq_df_SC$seg_id %>% unique) aggiusta select only one segment 
+  
+  mutations <- Input_data %>% mutate (NV = NV.REL, DP = DP.REL) 
+  
+  fit <- fit_timing(segments = data_cna_single[1,], mutations = mutations, purity=purity)
+  
+  
+  inference_results <- dplyr::bind_rows(inference_results, fit$inference_results)
+  summarized_results <- dplyr::bind_rows(summarized_results, fit$summarized_results)
+  
+  
+  data_cna_single <- data_cna_single[1,] %>% select(from, to, chr, segment_name) 
+  data_cna <- dplyr::bind_rows(data_cna, data_cna_single)
+  accepted_mutations <- dplyr::bind_rows(accepted_mutations, fit$accepted_mutations)
+  
+}
+
+```
+
+
+```{r fit}
+fit <- list(inference_results = inference_results, summarized_results = summarized_results, accepted_mutations=accepted_mutations)
+
+saveRDS(fit, "fit_extra_loh.rds")
+fit_ab <- readRDS("fit_extra_loh.rds")
+fit_ab$summarized_results
+
+```
+
+
+
+
+```{r PLOT, echo = FALSE}
+p_istogram <- inference_results %>%
+  ggplot(mapping = aes(x=tau, fill=segment_name, col = segment_name)) + #
+  geom_histogram(binwidth=0.02, alpha = 0.5, position = "identity") +
+  theme(legend.position = 'top')
+p_istogram 
+
+```
+
+
+```{r PLOT 2, echo = FALSE, fig.height= 14}
+
+p_istogram_2 <- inference_results %>%
+  ggplot(mapping = aes(x=tau, fill=segment_name, col = segment_name)) + #
+  geom_histogram(binwidth=0.01, alpha = 0.5, position = "identity") +
+  theme(legend.position = 'none') +
+  facet_grid( vars(segment_name) , scales = "free") 
+    
+p_istogram_2
+ggsave(paste0("plots/inference_ab.png"))
+
+
+```
+
+Number of accepted mutations per segment
+```{r number of accepted mutations per segment}
+table(fit$accepted_mutations$segment)
+```
+
+```{r number of  mutations alpha - beta per segment}
+for (i in 1:length(names)){
+  print(names[i])
+  print (table(data[[names[i]]]$timing_classification))
+}
+
+```

@@ -1,0 +1,490 @@
+---
+title: "Timing EXTRA LOH"
+author: "University of trieste Sara Cocomello"
+date: "2024-06-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r packages_data, results='hide', echo = FALSE }
+library(ggplot2)
+library(tidyverse)
+library(rstan)
+library(cmdstanr)
+library(grid)
+library(gridExtra)
+
+source("scripts/fit_no_filtering.R")
+source("scripts/utils.R")
+source("scripts/simulate_mutations.R")
+source("scripts/plot.R")
+
+
+UPN01 <- readRDS("Data/extra_cnloh/alpha_beta/UPN01/mutations.rds")
+UPN02 <- readRDS("Data/extra_cnloh/alpha_beta/UPN02/mutations.rds")
+UPN03 <- readRDS("Data/extra_cnloh/alpha_beta/UPN03/mutations.rds")
+UPN04 <- readRDS("Data/extra_cnloh/alpha_beta/UPN04/mutations.rds")
+UPN05 <- readRDS("Data/extra_cnloh/alpha_beta/UPN05/mutations.rds")
+UPN10 <- readRDS("Data/extra_cnloh/alpha_beta/UPN10/mutations.rds")
+UPN11 <- readRDS("Data/extra_cnloh/alpha_beta/UPN11/mutations.rds")
+```
+
+
+
+```{r data}
+
+# ALTERNATIVE FILTERING timing_classification 
+
+UPN01_NV = UPN01 %>% filter(timing_classification %in% c("alpha private", "alpha sub"), 
+                            PASS == TRUE)
+
+UPN02_NV = UPN02 %>% filter(timing_classification %in% c("beta"), 
+                            PASS == TRUE)
+
+UPN04_NV = UPN04 %>% filter(timing_classification %in% c("alpha private", "beta"),
+                            PASS == TRUE)
+
+UPN05_NV = UPN05 %>% filter(timing_classification  %in% c("alpha private", "beta"), 
+                            chr == "chr1",
+                            PASS == TRUE)
+
+UPN10_NV = UPN10 %>% filter(timing_classification %in% c("alpha private", "beta private"), 
+                            PASS == TRUE)
+
+UPN11_NV = UPN11 %>% filter(timing_classification %in% c("beta"), 
+                            PASS == TRUE)
+
+data <- list(UPN01_NV = UPN01_NV, UPN02_NV = UPN02_NV, UPN04_NV = UPN04_NV, UPN05_NV = UPN05_NV, UPN10_NV = UPN10_NV, UPN11_NV = UPN11_NV)
+names <- c("UPN01_NV","UPN02_NV","UPN04_NV","UPN05_NV","UPN10_NV", "UPN11_NV")
+
+```
+
+```{r plot data NV.REL/DP.REL mutations alpha - beta per segment}
+for (i in 1:length(names)){
+  assign("x", data[[names[i]]])
+  hist_data <- x %>% 
+  ggplot(mapping = aes(x=(NV.REL/DP.REL), fill=timing_classification, col = timing_classification)) + #
+  geom_histogram(binwidth=0.01, alpha = 0.5, position = "identity") +
+  theme(legend.position = 'top') +
+  ggtitle( names[i], data[[names[i]]]$segment.REL)
+
+  print(hist_data)
+  
+  ggsave(paste0("plots/data",names[i],".png"))
+}
+
+
+
+```
+
+
+```{r inference, results='hide'}
+
+data_cna <- dplyr::tibble()
+inference_results <- dplyr::tibble()
+summarized_results <- dplyr::tibble()
+accepted_mutations <- dplyr::tibble()
+
+purity = 1
+for(i in 1:length(names)){
+  
+  Input_data <- data[[names[i]]]
+  
+  #Input_data = UPN05_NV
+  data_cna_single <- Input_data %>% mutate (Major = unlist(strsplit(Input_data$segment.REL[1], ":"))[1],
+                                            minor = unlist(strsplit(Input_data$segment.REL[1], ":"))[2],
+                                            purity = purity,
+                                            from = min(Input_data$from), ### GIUSTO?
+                                            to = max(Input_data$to),
+                                            segment_name = names[i])
+  
+  #data_cna <- (seq_df_SC$seg_id %>% unique) aggiusta select only one segment 
+  
+  mutations <- Input_data %>% mutate (NV = NV.REL, DP = DP.REL) 
+  
+  fit <- fit_timing(segments = data_cna_single[1,], mutations = mutations, purity=purity)
+  
+  
+  inference_results <- dplyr::bind_rows(inference_results, fit$inference_results)
+  summarized_results <- dplyr::bind_rows(summarized_results, fit$summarized_results)
+  
+  
+  data_cna_single <- data_cna_single[1,] %>% select(from, to, chr, segment_name) 
+  data_cna <- dplyr::bind_rows(data_cna, data_cna_single)
+  accepted_mutations <- dplyr::bind_rows(accepted_mutations, fit$accepted_mutations)
+  
+}
+
+```
+
+
+```{r fit}
+fit <- list(inference_results = inference_results, summarized_results = summarized_results, accepted_mutations=accepted_mutations)
+
+saveRDS(fit, "fit_extra_loh_simple.rds")
+fit_loh<-readRDS("fit_extra_loh_simple.rds")
+fit_loh$summarized_results
+```
+
+
+```{r PLOT, echo = FALSE}
+p_istogram <- fit_loh$inference_results %>%
+  ggplot(mapping = aes(x=tau, fill=segment_name, col = segment_name)) + #
+  geom_histogram(binwidth=0.02, alpha = 0.5, position = "identity") +
+  theme(legend.position = 'top')
+p_istogram 
+
+```
+```{r PLOT 2, echo = FALSE, fig.height= 14}
+
+p_istogram_2 <- fit_loh$inference_results %>%
+  ggplot(mapping = aes(x=tau, fill=segment_name, col = segment_name)) + #
+  geom_histogram(binwidth=0.01, alpha = 0.5, position = "identity") +
+  theme(legend.position = 'none') +
+  facet_grid( vars(segment_name) , scales = "free") 
+p_istogram_2
+
+ggsave(paste0("plots/inference_extra.png"))
+
+
+```
+
+Number of accepted mutations per segment
+```{r number of accepted mutations per segment}
+table(fit_loh$accepted_mutations$segment)
+```
+
+
+```{r number of  mutations alpha - beta per segment}
+for (i in 1:length(names)){
+  print(names[i])
+  print (table(data[[names[i]]]$timing_classification))
+}
+
+```
+
+
+
+
+
+```{r check UPN04-05}
+
+library(ggplot2)
+library(tidyverse)
+library(rstan)
+library(cmdstanr)
+library(grid)
+library(gridExtra)
+
+source("scripts/fit_no_filtering.R")
+source("scripts/utils.R")
+source("scripts/simulate_mutations.R")
+source("scripts/plot.R")
+
+
+# LOAD DATA #
+UPN04_extra <- readRDS("Data/extra_cnloh/alpha_beta/UPN04/mutations.rds")
+UPN05_extra <- readRDS("Data/extra_cnloh/alpha_beta/UPN05/mutations.rds")
+
+UPN04_alpha_beta <- readRDS("Data/alpha_beta/UPN04/mutations.rds")
+UPN05_alpha_beta <- readRDS("Data/alpha_beta/UPN05/mutations.rds")
+
+
+# FILTERING #
+UPN04_extra_NV = UPN04_extra %>% filter(timing_classification %in% c("alpha private", "beta"),PASS == TRUE)
+UPN05_extra_NV = UPN05_extra %>% filter(timing_classification  %in% c("alpha private", "beta"),chr == "chr1",PASS == TRUE)
+
+UPN04_alpha_beta_NV = UPN04_alpha_beta %>% ungroup %>% filter(timing_classification %in% c("alpha"),PASS == TRUE)
+UPN05_alpha_beta_NV = UPN05_alpha_beta %>% filter(timing_classification %in% c("alpha", "beta"),PASS == TRUE)
+
+
+data <- list(UPN04 = UPN04_extra_NV, UPN05 = UPN05_extra_NV, UPN04_LSH = UPN04_alpha_beta_NV, UPN05_LSH = UPN05_alpha_beta_NV)
+names <- c("UPN04","UPN04_LSH", "UPN05", "UPN05_LSH")
+
+
+
+
+
+
+for (i in 1:length(names)){
+  assign("x", data[[names[i]]])
+  hist_data <- x %>% 
+  ggplot(mapping = aes(x=(NV.REL/DP.REL), fill=timing_classification, col = timing_classification)) + #
+  geom_histogram(binwidth=0.01, alpha = 0.5, position = "identity") +
+  theme(legend.position = 'top') +
+  ggtitle( names[i], data[[names[i]]]$segment.REL)
+
+  print(hist_data)
+  
+  ggsave(paste0("plots/data",names[i],".png"))
+}
+
+
+for (i in 1:length(names)){
+  assign("x", data[[names[i]]])
+  hist_data <- x %>% 
+  ggplot(mapping = aes(x=(NV.REL), fill=timing_classification, col = timing_classification)) + #
+  geom_histogram(binwidth=0.01, alpha = 0.5, position = "identity") +
+  theme(legend.position = 'top') +
+  ggtitle( names[i], data[[names[i]]]$segment.REL)
+
+  print(hist_data)
+  
+  ggsave(paste0("plots/data",names[i],"_NV.png"))
+}
+
+
+
+data_cna <- dplyr::tibble()
+inference_results <- dplyr::tibble()
+summarized_results <- dplyr::tibble()
+accepted_mutations <- dplyr::tibble()
+component_binomial <- dplyr::tibble()
+y_rep <- dplyr::tibble()
+omega_1 <- dplyr::tibble()
+omega_2 <- dplyr::tibble()
+
+
+purity = 0.98
+for(i in 1:length(names)){
+  
+  Input_data <- data[[names[i]]]
+  
+  #Input_data = UPN05_NV
+  data_cna_single <- Input_data %>% mutate (Major = unlist(strsplit(Input_data$segment.REL[1], ":"))[1],
+                                            minor = unlist(strsplit(Input_data$segment.REL[1], ":"))[2],
+                                            purity = purity,
+                                            from = min(Input_data$from), ### GIUSTO?
+                                            to = max(Input_data$to),
+                                            segment_name = names[i])
+  
+  #data_cna <- (seq_df_SC$seg_id %>% unique) aggiusta select only one segment 
+  
+  mutations <- Input_data %>% mutate (NV = NV.REL, DP = DP.REL) 
+  
+  fit <- fit_timing(segments = data_cna_single[1,], mutations = mutations, purity=purity)
+  
+  saveRDS(fit, paste0("results/fit", names[i],".rds"))
+  
+  
+  inference_results <- dplyr::bind_rows(inference_results, fit$inference_results)
+  summarized_results <- dplyr::bind_rows(summarized_results, fit$summarized_results)
+  component_binomial <- dplyr::bind_rows(component_binomial, fit$component_binomial)
+  y_rep <- dplyr::bind_rows(y_rep, fit$y_rep)
+  omega_1 <- dplyr::bind_rows(omega_1, fit$omega_1)
+  omega_2 <- dplyr::bind_rows(omega_2, fit$omega_2)
+
+
+  
+  data_cna_single <- data_cna_single[1,] %>% select(from, to, chr, segment_name) 
+  data_cna <- dplyr::bind_rows(data_cna, data_cna_single)
+  accepted_mutations <- dplyr::bind_rows(accepted_mutations, fit$accepted_mutations)
+  
+}
+
+
+
+fit <- list(omega_1 = omega_1, omega_2 = omega_2, inference_results = inference_results, summarized_results = summarized_results, accepted_mutations=accepted_mutations, component_binomial = component_binomial, y_rep = y_rep)
+
+saveRDS(fit, "fit_extra_alpha_beta_LOH.rds")
+fit_extra_alpha_beta<-readRDS("fit_extra_alpha_beta_LOH.rds")
+
+fit_extra_alpha_beta$summarized_results
+
+
+
+
+
+
+# log_lik
+# comp_binom
+# y_rep
+
+
+
+# overlap on the same graph
+hist_data_extra <- data["UPN04"] %>% 
+  ggplot(mapping = aes(x=(NV.REL/DP.REL), fill=timing_classification, col = timing_classification)) + #
+  geom_histogram(binwidth=0.01, alpha = 0.5, position = "identity") +
+  theme(legend.position = 'top') +
+  ggtitle( names[i], data[[names[i]]]$segment.REL)
+
+
+hist_data_LSH <- data["UPN04_LSH"] %>% 
+  ggplot(mapping = aes(x=(NV.REL/DP.REL), fill=timing_classification, col = timing_classification)) + #
+  geom_histogram(binwidth=0.01, alpha = 0.5, position = "identity") +
+  theme(legend.position = 'top') +
+  ggtitle( names[i], data[[names[i]]]$segment.REL)
+
+
+
+p_istogram <- fit_extra_alpha_beta$inference_results %>% filter(segment_name == "UPN04" | segment_name == "UPN04_LSH") %>%
+  ggplot(mapping = aes(x=tau, fill=segment_name, col = segment_name)) + #
+  geom_histogram(binwidth=0.02, alpha = 0.5, position = "identity") +
+  theme(legend.position = 'top')
+p_istogram 
+
+
+
+plot_inference_04 <- (p_istogram | (hist_data_extra/hist_data_LSH)) + 
+      plot_layout(widths = c(6), heights = c(10)) +
+      plot_annotation(
+        title = 'Title  ',
+        subtitle = "Subtitle",
+        caption = "caption"
+      ) & theme(text = element_text(size = 8), plot.title = element_text(size = 10), plot.subtitle = element_text(size = 8), axis.text = element_text(size = 8), plot.caption = element_text(size = 5))
+plot_inference_04
+
+ggsave(paste0("plots/inference_UPN04.png"))
+
+
+
+
+
+hist_data_extra <- data["UPN05"] %>% 
+  ggplot(mapping = aes(x=(NV.REL/DP.REL), fill=timing_classification, col = timing_classification)) + #
+  geom_histogram(binwidth=0.01, alpha = 0.5, position = "identity") +
+  theme(legend.position = 'top') +
+  ggtitle( names[i], data[[names[i]]]$segment.REL)
+
+
+hist_data_LSH <- data["UPN05_LSH"] %>% 
+  ggplot(mapping = aes(x=(NV.REL/DP.REL), fill=timing_classification, col = timing_classification)) + #
+  geom_histogram(binwidth=0.01, alpha = 0.5, position = "identity") +
+  theme(legend.position = 'top') +
+  ggtitle( names[i], data[[names[i]]]$segment.REL)
+
+
+p_istogram <- fit_extra_alpha_beta$inference_results %>% filter(segment_name == "UPN05" | segment_name == "UPN05_LSH") %>%
+  ggplot(mapping = aes(x=tau, fill=segment_name, col = segment_name)) + #
+  geom_histogram(binwidth=0.02, alpha = 0.5, position = "identity") +
+  theme(legend.position = 'top')
+p_istogram  
+  
+  
+plot_inference_05 <- (p_istogram | (hist_data_extra/hist_data_LSH)) + 
+      plot_layout(widths = c(6), heights = c(10)) +
+      plot_annotation(
+        title = 'Title  ',
+        subtitle = "Subtitle",
+        caption = "caption"
+      ) & theme(text = element_text(size = 8), plot.title = element_text(size = 10), plot.subtitle = element_text(size = 8), axis.text = element_text(size = 8), plot.caption = element_text(size = 5))
+plot_inference_05
+
+ggsave(paste0("plots/inference_UPN04.png"))
+
+
+# Facet on segments 
+# p_istogram_2 <- fit_extra_alpha_beta$inference_results %>%
+#   ggplot(mapping = aes(x=tau, fill=segment_name, col = segment_name)) + 
+#   geom_histogram(binwidth=0.01, alpha = 0.5, position = "identity") +
+#   theme(legend.position = 'none') +
+#   facet_grid( vars(segment_name) , scales = "free") 
+# p_istogram_2
+
+
+```
+
+
+
+```{r predicted }
+
+# p_istogram_comp_bin <- fit_extra_alpha_beta$component_binomial %>%
+#   ggplot(mapping = aes(x=comp_binomial, col = segment)) + 
+#   geom_bar(position = "dodge") +
+#   geom_text(
+#     aes(label = after_stat(count)), 
+#     stat = 'count', 
+#     position = position_dodge(width = 0.9), 
+#     vjust = -0.5
+#   ) +
+#   theme(legend.position = 'none') +
+#   facet_grid(vars(segment), scales = "free") +
+#   labs(x = "Component Binomial", y = "Number of Observations", title = "Number of Observations per Category")
+# 
+# p_istogram_comp_bin
+# 
+# #ggsave(paste0("plots/inference_extra_alpha_beta.png"))
+# 
+
+
+
+
+sink("plots/n_mutations.txt")
+
+for (i in 1:length(names)){
+  print(names[i])
+  print(table(data[[names[i]]]$timing_classification))
+}
+
+table(fit_extra_alpha_beta$accepted_mutations$segment)
+
+
+fit_extra_alpha_beta$component_binomial %>% filter(segment == "UPN04_extra_NV") %>% table()
+fit_extra_alpha_beta$component_binomial %>% filter(segment == "UPN04_alpha_beta_NV") %>% table()
+fit_extra_alpha_beta$component_binomial %>% filter(segment == "UPN05_extra_NV") %>% table()
+fit_extra_alpha_beta$component_binomial %>% filter(segment == "UPN05_alpha_beta_NV") %>% table()
+
+sink()
+
+
+
+
+```
+
+```{r single fit }
+Input_data <- UPN04_alpha_beta_NV
+
+
+# for(i in 1:length(names)){
+#   
+#   Input_data <- data[[names[i]]]{
+    
+    
+    beta_binomial_disp = 0.01
+    purity = 1
+    
+    
+    k = Input_data$segment.REL[1]
+    peaks = get_clonal_peaks(k, purity)
+    mutations <- Input_data %>% mutate (NV = NV.REL, DP = DP.REL) 
+    
+    
+    input_data <- list(
+              N = nrow(mutations),
+              NV = mutations$NV,
+              DP = mutations$DP,
+              peaks = peaks,
+              beta_dispersion = beta_binomial_disp
+            )
+    
+
+
+    model <- cmdstanr::cmdstan_model("models/mixture_CNA_timing_binomial.stan")
+
+fit <- model$sample(data=input_data, iter_warmup=2000, iter_sampling=2000, chains=8, parallel_chains=8)
+
+fit$summary()
+
+    
+#   }
+#   
+# }
+
+Input_data <- UPN04_extra_NV
+n <- (mean(Input_data$DP.REL))
+
+success <- 0:n
+plot(success,dbinom(success,size=as.integer(n),prob=0.5),
+     type='h',
+     main='Binomial Distribution',
+     ylab='Probability',
+     xlab ='Successes',
+     lwd=3)
+
+```
