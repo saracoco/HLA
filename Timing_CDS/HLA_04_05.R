@@ -6,7 +6,9 @@ library(cmdstanr)
 library(grid)
 library(gridExtra)
 
-setwd("E:/scratch/CDS_ORFEO/Timing_CDS")
+setwd("E:/u/cdslab/scocomello/scratch/CDS_ORFEO/Timing_CDS")
+setwd("C:/Users/sarac/HLA/Timing_CDS")
+
 
 source("scripts/fit.R") #fit_no_filtering
 source("scripts/utils.R")
