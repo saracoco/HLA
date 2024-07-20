@@ -10,17 +10,17 @@ setwd("E:/scratch/CDS_ORFEO/Timing_CDS")
 
 source("scripts/fit.R") #fit_no_filtering
 source("scripts/utils.R")
-source("scripts/simulate_mutations.R")
+#source("scripts/simulate_mutations.R")
 source("scripts/plot.R")
 
 
 
 # LOAD DATA #
-UPN04_extra <- readRDS("Data/extra_cnloh/alpha_beta/UPN04/mutations.rds")
-UPN05_extra <- readRDS("Data/extra_cnloh/alpha_beta/UPN05/mutations.rds")
+UPN04_extra <- readRDS("../Data/extra_cnloh/alpha_beta/UPN04/mutations.rds")
+UPN05_extra <- readRDS("../Data/extra_cnloh/alpha_beta/UPN05/mutations.rds")
 
-UPN04_alpha_beta <- readRDS("Data/alpha_beta/UPN04/mutations.rds")
-UPN05_alpha_beta <- readRDS("Data/alpha_beta/UPN05/mutations.rds")
+UPN04_alpha_beta <- readRDS("../Data/alpha_beta/UPN04/mutations.rds")
+UPN05_alpha_beta <- readRDS("../Data/alpha_beta/UPN05/mutations.rds")
 
 
 # FILTERING #
