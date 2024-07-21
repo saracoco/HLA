@@ -1,4 +1,3 @@
-//
 data {
   int<lower=0> K;  // Number of cluster
   int<lower=0> N;  // Number of observations
