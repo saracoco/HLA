@@ -1,0 +1,221 @@
+library(patchwork)
+library(ggplot2)
+library(tidyverse)
+library(rstan)
+library(cmdstanr)
+library(grid)
+library(gridExtra)
+
+setwd("E:/u/cdslab/scocomello/scratch/CDS_ORFEO/Timing_CDS")
+setwd("C:/Users/sarac/HLA/Timing_CDS")
+
+
+source("scripts/fit.R") 
+source("scripts/utils.R")
+source("scripts/plot.R")
+
+
+
+# LOAD DATA ##################################################################
+UPN01 <- readRDS("../../Data/extra_cnloh/alpha_beta/UPN01/mutations.rds")
+UPN02 <- readRDS("../../Data/extra_cnloh/alpha_beta/UPN02/mutations.rds")
+UPN03 <- readRDS("../../Data/extra_cnloh/alpha_beta/UPN03/mutations.rds")
+UPN04 <- readRDS("../../Data/extra_cnloh/alpha_beta/UPN04/mutations.rds")
+UPN05 <- readRDS("../../Data/extra_cnloh/alpha_beta/UPN05/mutations.rds")
+UPN10 <- readRDS("../../Data/extra_cnloh/alpha_beta/UPN10/mutations.rds")
+UPN11 <- readRDS("../../Data/extra_cnloh/alpha_beta/UPN11/mutations.rds")
+
+
+UPN_1_NV = UPN01 %>% filter(timing_classification %in% c("alpha private", "alpha sub"), 
+                            PASS == TRUE)
+UPN_2_NV = UPN02 %>% filter(timing_classification %in% c("beta"), 
+                            PASS == TRUE)
+UPN_4_NV = UPN04 %>% filter(timing_classification %in% c("alpha private", "beta"),
+                            PASS == TRUE)
+UPN_5_NV = UPN05 %>% filter(timing_classification  %in% c("alpha private", "beta"), 
+                            chr == "chr1",
+                            PASS == TRUE)
+UPN_10_NV = UPN10 %>% filter(timing_classification %in% c("alpha private", "beta private"), 
+                            PASS == TRUE)
+UPN_11_NV = UPN11 %>% filter(timing_classification %in% c("beta"), 
+                            PASS == TRUE)
+
+
+UPN01_hla <- readRDS("../../Data/alpha_beta/UPN01/mutations.rds")
+UPN02_hla <- readRDS("../../Data/alpha_beta/UPN02/mutations.rds")
+UPN04_hla <- readRDS("../../Data/alpha_beta/UPN04/mutations.rds")
+UPN05_hla <- readRDS("../../Data/alpha_beta/UPN05/mutations.rds")
+UPN10_hla <- readRDS("../../Data/alpha_beta/UPN10/mutations.rds")
+UPN11_hla <- readRDS("../../Data/alpha_beta/UPN11/mutations.rds")
+
+
+
+
+UPN_1_hla_NV = UPN01_hla %>%  ungroup %>% filter(timing_classification %in% c("alpha_0", "alpha_1"), 
+                                         PASS == TRUE)
+UPN_2_hla_NV = UPN02_hla %>% filter(timing_classification == "alpha_shared",
+                            VAF.PRE<0.35, 
+                            PASS == TRUE)
+UPN_4_hla_NV = UPN04_hla %>% ungroup %>% filter(timing_classification %in% c("alpha"), 
+                                        PASS == TRUE)
+UPN_5_hla_NV = UPN05_hla %>% filter(timing_classification %in% c("alpha", "beta"), 
+                            PASS == TRUE)
+UPN_10_hla_NV = UPN10_hla %>% filter(timing_classification %in% c("alpha_0", "alpha", "beta_subclonal"), 
+                            PASS == TRUE)
+UPN_11_hla_NV = UPN11_hla %>% filter(timing_classification %in% c("alpha_0", "alpha", "beta"), 
+                            PASS == TRUE)
+
+
+
+
+
+
+
+data <- list(UPN1 = UPN_1_NV, UPN2 = UPN_2_NV, UPN4 = UPN_4_NV, UPN5 = UPN_5_NV, UPN10 = UPN_10_NV, UPN11 = UPN_11_NV, UPN1_HLA = UPN_1_hla_NV, UPN2_HLA = UPN_2_hla_NV, UPN4_HLA = UPN_4_hla_NV,  UPN5_HLA = UPN_5_hla_NV, UPN10_HLA = UPN_10_hla_NV, UPN11_HLA = UPN_11_hla_NV)
+
+names <- c("UPN1","UPN2","UPN4","UPN5","UPN10", "UPN11", "UPN1_HLA", "UPN2_HLA", "UPN4_HLA", "UPN5_HLA", "UPN10_HLA", "UPN11_HLA")
+
+# names <- c("UPN04","UPN04_LSH")
+# names <- c("UPN05", "UPN05_LSH")
+
+
+
+# PREPARE DATA FOR INFERENCE SINGLE SEGMENT OF EXTRA EVENT + HLA EVENT ##############################################àà
+
+
+
+purity = 0.98 #chiedi vero valore 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+for(i in 1:(length(names)/2)){
+  
+  data_cna <- dplyr::tibble()
+  inference_results <- dplyr::tibble()
+  summarized_results <- dplyr::tibble()
+  accepted_mutations <- dplyr::tibble()
+  component_binomial <- dplyr::tibble()
+  y_rep <- dplyr::tibble()
+  omega_1 <- dplyr::tibble()
+  omega_2 <- dplyr::tibble()
+  
+  
+  data_extra_hls <- data[c(i,((length(names)/2)+i))]
+  names_extra_hls <- names[c(i,((length(names)/2)+i))]
+  
+
+  for (j in 1:2){  # 1 = extra event, 2 = hls event 
+    
+      
+  Input_data <- data_extra_hls[[names_extra_hls[j]]]
+  
+  #Input_data = UPN05_NV
+  data_cna_single <- Input_data %>% mutate (Major = unlist(strsplit(Input_data$segment.REL[1], ":"))[1],
+                                            minor = unlist(strsplit(Input_data$segment.REL[1], ":"))[2],
+                                            purity = purity,
+                                            from = min(Input_data$from), ### GIUSTO?
+                                            to = max(Input_data$to),
+                                            segment_name = names_extra_hls[j])
+  
+
+  mutations <- Input_data %>% mutate (NV = NV.REL, DP = DP.REL) 
+  
+  fit <- fit_timing(segments = data_cna_single[1,], mutations = mutations, purity=purity)
+  
+  saveRDS(fit, paste0("results/fit", names_extra_hls[j],".rds"))
+  
+  
+  inference_results <- dplyr::bind_rows(inference_results, fit$inference_results)
+  summarized_results <- dplyr::bind_rows(summarized_results, fit$summarized_results)
+  component_binomial <- dplyr::bind_rows(component_binomial, fit$component_binomial)
+  y_rep <- dplyr::bind_rows(y_rep, fit$y_rep)
+  omega_1 <- dplyr::bind_rows(omega_1, fit$omega_1)
+  omega_2 <- dplyr::bind_rows(omega_2, fit$omega_2)
+  
+  
+  
+  data_cna_single <- data_cna_single[1,] %>% select(from, to, chr, segment_name) 
+  data_cna <- dplyr::bind_rows(data_cna, data_cna_single)
+  accepted_mutations <- dplyr::bind_rows(accepted_mutations, fit$accepted_mutations)
+    
+    
+  }
+
+
+
+fit <- list(omega_1 = omega_1, omega_2 = omega_2, inference_results = inference_results, summarized_results = summarized_results, accepted_mutations=accepted_mutations, component_binomial = component_binomial, y_rep = y_rep)
+
+saveRDS(fit, paste0("fit_extra_HLA_",names[i], ".rds"))
+fit_extra_HLA<-readRDS(paste0("fit_extra_HLA_",names[i], ".rds"))
+
+#fit_extra_HLA$summarized_results
+
+
+
+
+library(wesanderson)
+
+
+
+
+# overlap on the same graph
+hist_data_extra <- as.data.frame(data_extra_hls[names_extra_hls[1]][[1]]) %>% 
+  ggplot(mapping = aes(x=(NV.REL/DP.REL),  fill = timing_classification)) +
+  scale_color_manual(values = c("black"))+
+  scale_fill_manual(values = wes_palette("Darjeeling1"))+
+  geom_histogram(binwidth=0.01, alpha = 0.5, position = "identity") +
+  theme(legend.position = 'top') +
+  xlim(0, 1) +
+  labs(x = "VAF")+
+  ggtitle( names_extra_hls[1], data_extra_hls[names_extra_hls[1]][[1]]$segment.REL)
+
+
+hist_data_HLA <- as.data.frame(data_extra_hls[names_extra_hls[2]][[1]]) %>% 
+  ggplot(mapping = aes(x=(NV.REL/DP.REL),  fill = timing_classification)) +
+  scale_color_manual(values = c("black"))+
+  scale_fill_manual(values = wes_palette("Darjeeling1"))+
+  geom_histogram(binwidth=0.01, alpha = 0.5, position = "identity") +
+  theme(legend.position = 'top') +
+  xlim(0, 1) +
+  labs(x = "VAF")+
+  ggtitle( names_extra_hls[2], data_extra_hls[names_extra_hls[2]][[1]]$segment.REL)
+
+
+
+
+p_istogram <- fit_extra_HLA$inference_results %>% filter(segment_name == names_extra_hls[1] | segment_name == names_extra_hls[2]) %>%
+  ggplot(mapping = aes(x=tau, fill=segment_name)) +
+  scale_fill_manual(values = wes_palette("Cavalcanti1"))+
+  geom_histogram(binwidth=0.02, alpha = 0.7, position = "identity") +
+  theme(legend.position = 'top') +
+  xlim(0, 1) 
+
+
+plot_inference <- (p_istogram + (hist_data_extra / hist_data_HLA)) + 
+  plot_layout(widths = c(10,6), heights = c(10,1)) +
+  plot_annotation(
+    title = paste0(names_extra_hls[1], ' LSH and extra event '),
+    subtitle = paste0("Number of accepted mutations after filtering: extra = ", nrow(fit$accepted_mutations %>% filter(segment==names_extra_hls[1])), ", HLA =  ", nrow(fit$accepted_mutations %>% filter(segment==names_extra_hls[2])) ), #Extra event is on chr 
+    caption = "" #caption
+  ) & theme(text = element_text(size = 12), plot.title = element_text(size = 15), plot.subtitle = element_text(size = 12), axis.text = element_text(size = 10), plot.caption = element_text(size = 5))
+plot_inference
+
+ggsave(paste0("plots/inference_", names_extra_hls[1],".png"), width = 18, height = 10)
+
+}

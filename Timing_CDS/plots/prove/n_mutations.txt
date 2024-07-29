@@ -1,0 +1,46 @@
+[1] "UPN04_extra_NV"
+
+alpha private          beta 
+            4            44 
+[1] "UPN04_alpha_beta_NV"
+
+alpha 
+   13 
+[1] "UPN05_extra_NV"
+
+alpha private          beta 
+           52            13 
+[1] "UPN05_alpha_beta_NV"
+
+alpha  beta 
+   14    14 
+
+UPN04_alpha_beta_NV      UPN04_extra_NV UPN05_alpha_beta_NV      UPN05_extra_NV 
+                 13                  48                  28                  65 
+, , karyotype = 2:0, chr = chr15, segment_id = chr15_100319268_99791740
+
+             segment
+comp_binomial UPN04_extra_NV
+            1             46
+            2              2
+
+, , karyotype = 2:0, chr = chr6, segment_id = chr6_1022506_7636493
+
+             segment
+comp_binomial UPN04_alpha_beta_NV
+            1                  13
+
+, , karyotype = 2:0, chr = chr1, segment_id = chr1_143722776_248916052
+
+             segment
+comp_binomial UPN05_extra_NV
+            1             64
+            2              1
+
+, , karyotype = 2:0, chr = chr6, segment_id = chr6_11342740_9386084
+
+             segment
+comp_binomial UPN05_alpha_beta_NV
+            1                  27
+            2                   1
+

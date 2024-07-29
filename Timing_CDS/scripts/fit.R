@@ -34,7 +34,14 @@ segments <- segments %>%
 
     k <- paste(Major, minor, sep=':')
 
+    
+    
     peaks <- get_clonal_peaks(k, purity)
+    
+    
+    #peaks <- get_subclonal_peaks(k, purity, clonal_weigth)
+    
+    
 
     if (k %in% possible_k) {
       # Get info for mutations
