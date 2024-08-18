@@ -26,7 +26,7 @@ UPN10 <- readRDS("../../Data/extra_cnloh/alpha_beta/UPN10/mutations.rds")
 UPN11 <- readRDS("../../Data/extra_cnloh/alpha_beta/UPN11/mutations.rds")
 
 
-UPN_1_NV = UPN01 %>% filter(timing_classification %in% c("alpha private", "alpha sub"), 
+UPN_1_NV = UPN01 %>% filter(timing_classification %in% c("alpha private"),  #, "alpha sub"
                             PASS == TRUE)
 UPN_2_NV = UPN02 %>% filter(timing_classification %in% c("beta"), 
                             PASS == TRUE)
@@ -60,7 +60,7 @@ UPN_4_hla_NV = UPN04_hla %>% ungroup %>% filter(timing_classification %in% c("al
                                         PASS == TRUE)
 UPN_5_hla_NV = UPN05_hla %>% filter(timing_classification %in% c("alpha", "beta"), 
                             PASS == TRUE)
-UPN_10_hla_NV = UPN10_hla %>% filter(timing_classification %in% c("alpha_0", "alpha", "beta_subclonal"), 
+UPN_10_hla_NV = UPN10_hla %>% filter(timing_classification %in% c("alpha_0", "alpha"), #, "beta_subclonal"
                             PASS == TRUE)
 UPN_11_hla_NV = UPN11_hla %>% filter(timing_classification %in% c("alpha_0", "alpha", "beta"), 
                             PASS == TRUE)
@@ -77,6 +77,7 @@ names <- c("UPN1","UPN2","UPN4","UPN5","UPN10", "UPN11", "UPN1_HLA", "UPN2_HLA",
 
 # names <- c("UPN04","UPN04_LSH")
 # names <- c("UPN05", "UPN05_LSH")
+names <- c("UPN01","UPN01_LSH", "UPN11","UPN11_LSH")
 
 
 
@@ -136,7 +137,8 @@ for(i in 1:(length(names)/2)){
 
   mutations <- Input_data %>% mutate (NV = NV.REL, DP = DP.REL) 
   
-  fit <- fit_timing(segments = data_cna_single[1,], mutations = mutations, purity=purity)
+  fit <- fit_timing(segments = data_cna_single[1,], mutations = mutations, purity=purity, 
+                    subclonal = FALSE, ccf_clonal = 0, k_subclonal = "1:1")
   
   saveRDS(fit, paste0("results/fit", names_extra_hls[j],".rds"))
   
